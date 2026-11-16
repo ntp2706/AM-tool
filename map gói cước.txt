@@ -1,0 +1,22 @@
+CA đơn vị && Kiểu lắp đặt
+- Cấp mới: -> sheet CADonViMoi (lấy hiển thị cột A)
+- Gia hạn: -> sheet CADonViGH (lấy hiển thị cột A)
+
+CA & BHXH && VNPT VAN
+- 10: -> sheet CA&BHXH10 (lấy hiển thị cột A)
+- 100: -> sheet CA&BHXH100 (lấy hiển thị cột A)
+- 1000: -> sheet CA&BHXH1000 (lấy hiển thị cột A)
+- MAX: -> sheet CA&BHXHMAX (lấy hiển thị cột A)
+
+BHXH && VNPT VAN
+- 10: -> sheet BHXH10 (lấy hiển thị cột A)
+- 100: -> sheet BHXH100 (lấy hiển thị cột A)
+- 1000: -> sheet BHXH1000 (lấy hiển thị cột A)
+- MAX: -> sheet BHXHMAX (lấy hiển thị cột A)
+
+Hóa đơn điện tử && Loại hóa đơn
+- Hóa đơn thường: -> sheet HDDTThuong (lấy hiển thị cột A)
+- MTT thường: -> sheet MTTThuong (lấy hiển thị cột A)
+- MTT cho hộ kinh doanh: -> sheet MTTHKD (lấy hiển thị cột A)
+- Xăng dầu thường: -> sheet PetroThuong (lấy hiển thị cột A)
+- Xăng dầu MTT: -> sheet PetroMTT (lấy hiển thị cột A)

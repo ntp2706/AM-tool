@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tra cứu MST</title>
+<style>
+  body{margin:0;padding:12px;font:14px system-ui,sans-serif}
+  form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  input[type=text]{padding:6px 8px} #cap{height:34px}
+</style>
+</head>
+<body>
+<div id="embed"></div>
+<script>
+const KEY = 'mst_store_v1';
+const $ = (s) => document.querySelector(s);
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+const keyOf = (r) => { const k = Object.keys(r).find((h) => /mã số thuế|mst/i.test(h)); return k ? r[k] : JSON.stringify(r); };
+
+function ingest(rows) {
+  const store = load(), now = new Date().toISOString();
+  rows.forEach((r) => { store[keyOf(r)] = { ...r, _fetchedAt: now }; });
+  try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { console.warn('Không lưu được', e); }
+  console.log('[MST] Kết quả vừa bắt:', rows);
+  console.log('[MST] Kho lưu (' + Object.keys(store).length + '):', Object.values(store));
+}
+
+// Dùng trong console: mstStore.all() | mstStore.get('0123456789') | mstStore.clear()
+window.mstStore = {
+  all: () => Object.values(load()),
+  get: (mst) => load()[mst],
+  clear: () => localStorage.removeItem(KEY),
+};
+
+function refreshCaptcha(bust) {
+  const img = $('#cap'); if (img) img.src = img.dataset.src + (bust ? '&_t=' + Date.now() : '');
+  const c = $('#embed [name=captcha]'); if (c) c.value = '';
+}
+
+function show(out) {
+  if (out.error) return console.error('[MST] Lỗi server:', out.error);
+  if (out.html) {
+    const old = $('#embed [name=mst]')?.value || '';
+    $('#embed').innerHTML = out.html;
+    $('#embed [name=mst]').value = old;
+  } else if (!$('#embed form')) return console.error('[MST] Không tìm thấy form', out.debug);
+  refreshCaptcha(false);
+  if (out.data) {
+    if (out.data.length) ingest(out.data);
+    else console.log('[MST] Không có kết quả (kiểm tra MST / mã xác nhận).');
+  }
+}
+
+async function submitForm(form) {
+  const fields = {};
+  new FormData(form).forEach((v, k) => { fields[k] = v; });
+  const r = await fetch('/proxy/submit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: form.dataset.action, method: form.dataset.method, fields }),
+  });
+  show(await r.json());
+}
+
+$('#embed').addEventListener('submit', (e) => { e.preventDefault(); submitForm(e.target).catch(console.error); });
+$('#embed').addEventListener('click', (e) => { if (e.target.id === 'cap') refreshCaptcha(true); });
+
+fetch('/proxy/page').then((r) => r.json()).then(show).catch(console.error);
+</script>
+</body>
+</html>

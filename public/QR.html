@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Quét QR trong PDF</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body{font-family:system-ui,Arial,sans-serif;margin:0;padding:24px;background:#f5f6f8;color:#1c1e21}
+  .wrap{max-width:960px;margin:auto}
+  h1{font-size:20px;margin:0 0 4px}
+  p.sub{margin:0 0 16px;color:#5f6770;font-size:14px}
+  .card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:16px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  label{font-size:14px}
+  input[type=number]{width:64px;padding:4px}
+  button{padding:9px 16px;border:0;border-radius:7px;background:#2563eb;color:#fff;font-size:14px;cursor:pointer}
+  button:disabled{background:#9db4e8;cursor:not-allowed}
+  button.sec{background:#e4e7eb;color:#1c1e21}
+  #status{font-size:14px;margin-top:10px;color:#374151}
+  .res{border-left:5px solid #2563eb;background:#f0f5ff;padding:10px 12px;margin-top:10px;border-radius:4px;font-size:14px}
+  .res b{display:block;font-size:12px;color:#5f6770;font-weight:600}
+  .res span{word-break:break-all;white-space:pre-wrap;font-size:16px}
+  .res.ocr{border-color:#15803d;background:#f0fdf4}
+  .res.bad{border-color:#b91c1c;background:#fef2f2}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quét QR trong PDF</h1>
+  <p class="sub">Dùng Chrome/Edge, cần internet (tải thư viện lần đầu). Quét QR trên mọi trang, chỉ lấy số, họ tên và ngày cấp. Nhấn F12 để xem log chi tiết.</p>
+
+  <div class="card">
+    <div class="row">
+      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <button id="pick">1. Chọn file PDF</button>
+      <button id="start" disabled>2. Quét QR</button>
+    </div>
+    <div id="status">Chưa chọn file.</div>
+    <div id="out"></div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const $ = id => document.getElementById(id);
+let pdfFile = null;
+const setStatus = t => { $("status").textContent = t; };
+const tick = () => new Promise(r => setTimeout(r));
+
+function addResult(label, text, cls){
+  const d = document.createElement("div"); d.className = "res " + (cls || "");
+  const b = document.createElement("b"); b.textContent = label;
+  const s = document.createElement("span"); s.textContent = text;
+  d.append(b, s); $("out").appendChild(d);
+}
+
+// QR CCCD: số|cmnd cũ|họ tên|ngày sinh|giới tính|địa chỉ|ngày cấp  → lấy số, họ tên, ngày cấp
+function parseQR(text){
+  const p = text.split("|").map(x => x.trim());
+  if (p.length < 7) return null;
+  const d = p[6];
+  const date = /^\d{8}$/.test(d) ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d;
+  return { id: p[0], name: p[2], date };
+}
+
+$("pick").onclick = () => $("file").click();
+$("file").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") { pdfFile = null; $("start").disabled = true; setStatus("File không phải PDF."); return; }
+  pdfFile = f; $("start").disabled = false;
+  console.log(`[FILE] "${f.name}" (${(f.size / 1024).toFixed(0)} KB)`);
+  setStatus("Đã chọn: " + f.name);
+};
+/* ================= Bước 1: QR (gọn nhẹ) =================
+   chỉ dùng ảnh gốc từ PDF (không lọc ảnh); jsQR -> BarcodeDetector -> ZXing.
+   Quét cả trang trước, không ra mới chia 4 ô, cuối cùng phóng to 3.5x. */
+let bd = null;
+try { if ("BarcodeDetector" in window) bd = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) {}
+let zx = null;
+try {
+  if (typeof ZXing !== "undefined") {
+    zx = new ZXing.MultiFormatReader();
+    const h = new Map();
+    h.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.QR_CODE]);
+    h.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zx.setHints(h);
+  }
+} catch (e) { zx = null; }
+
+function grayOf(d, n){
+  const g = new Uint8ClampedArray(n);
+  for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+  return g;
+}
+function zxDecode(g, w, h){
+  const src = new ZXing.RGBLuminanceSource(g, w, h);
+  for (const s of [src, new ZXing.InvertedLuminanceSource(src)]) {
+    try {
+      const r = zx.decodeWithState(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(s)));
+      if (r && r.getText()) {
+        const p = r.getResultPoints() || [];
+        let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        p.forEach(q => { x0 = Math.min(x0, q.getX()); x1 = Math.max(x1, q.getX()); y0 = Math.min(y0, q.getY()); y1 = Math.max(y1, q.getY()); });
+        if (!p.length) { x0 = 0; y0 = 0; x1 = w; y1 = h; }
+        return { data: r.getText(), box: [x0, y0, x1, y1] };
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+// Thứ tự: jsQR (nhanh, đọc trực tiếp ảnh màu) -> BarcodeDetector -> ZXing
+async function decodeImage(img, w, h){
+  if (typeof jsQR !== "undefined") {
+    const r = jsQR(img.data, w, h, { inversionAttempts: "attemptBoth" });
+    if (r) {
+      const l = r.location, xs = [l.topLeftCorner.x, l.topRightCorner.x, l.bottomLeftCorner.x, l.bottomRightCorner.x], ys = [l.topLeftCorner.y, l.topRightCorner.y, l.bottomLeftCorner.y, l.bottomRightCorner.y];
+      return { engine: "jsQR", list: [{ data: r.data, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] }] };
+    }
+  }
+  if (bd) {
+    try {
+      const res = await bd.detect(img);
+      const list = res.filter(b => b.rawValue).map(b => { const k = b.boundingBox; return { data: b.rawValue, box: [k.x, k.y, k.x + k.width, k.y + k.height] }; });
+      if (list.length) return { engine: "BarcodeDetector", list };
+    } catch (e) {}
+  }
+  if (zx) { const z = zxDecode(grayOf(img.data, w * h), w, h); if (z) return { engine: "ZXing", list: [z] }; }
+  return null;
+}
+async function scanRegion(c, sx, sy, sw, sh, codes, label){
+  // Lấy nguyên điểm ảnh đã render từ PDF, KHÔNG lọc, KHÔNG thêm viền, KHÔNG đổi độ tương phản
+  const img = c.getContext("2d").getImageData(sx, sy, sw, sh);
+  for (let it = 0; it < 6; it++) {
+    const res = await decodeImage(img, sw, sh);
+    if (!res) break;
+    res.list.forEach(r => {
+      if (!codes.includes(r.data)) { codes.push(r.data); console.log(`[QR] ${res.engine} đọc được (${label})`); }
+      // chỉ sau khi ĐỌC ĐƯỢC mới tô trắng mã đó (trên bản sao vùng ảnh) để tìm mã kế tiếp
+      const m = Math.max(r.box[2] - r.box[0], r.box[3] - r.box[1]) * 0.12 + 6;
+      const x0 = Math.max(0, Math.floor(r.box[0] - m)), x1 = Math.min(sw, Math.ceil(r.box[2] + m));
+      const y0 = Math.max(0, Math.floor(r.box[1] - m)), y1 = Math.min(sh, Math.ceil(r.box[3] + m));
+      for (let y = y0; y < y1; y++) img.data.fill(255, (y * sw + x0) * 4, (y * sw + x1) * 4);
+    });
+    await tick();
+  }
+}
+async function renderScaled(page, want){
+  const base = page.getViewport({ scale: 1 });
+  const sc = Math.min(want, 3600 / Math.max(base.width, base.height));
+  const vp = page.getViewport({ scale: sc });
+  const c = document.createElement("canvas"); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  return { c, sc };
+}
+// Quét cả trang ở 2x; không ra thì chia 4 ô; vẫn không ra thì quét cả trang ở 3.5x
+async function scanPageQR(page){
+  const codes = [];
+  let { c, sc } = await renderScaled(page, 2);
+  let W = c.width, H = c.height;
+  await scanRegion(c, 0, 0, W, H, codes, `x${sc.toFixed(1)} cả trang`);
+  if (!codes.length) {
+    const tw = W / 2, th = H / 2, ox = 0.3 * tw, oy = 0.3 * th;
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+      const x0 = Math.max(0, Math.floor(i * tw - ox)), x1 = Math.min(W, Math.ceil((i + 1) * tw + ox));
+      const y0 = Math.max(0, Math.floor(j * th - oy)), y1 = Math.min(H, Math.ceil((j + 1) * th + oy));
+      await scanRegion(c, x0, y0, x1 - x0, y1 - y0, codes, `x${sc.toFixed(1)} ô ${i},${j}`);
+    }
+  }
+  if (!codes.length) {
+    const r = await renderScaled(page, 3.5);
+    if (r.sc > sc * 1.05) await scanRegion(r.c, 0, 0, r.c.width, r.c.height, codes, `x${r.sc.toFixed(1)} cả trang`);
+  }
+  return codes;
+}
+
+/* ================= Chạy ================= */
+$("start").onclick = async () => {
+  if (!pdfFile) return;
+  $("start").disabled = true; $("pick").disabled = true; $("out").innerHTML = "";
+  const tag = `[${pdfFile.name}]`, t0 = performance.now();
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await pdfFile.arrayBuffer()) }).promise;
+    let total = 0;
+    for (let p = 1; p <= pdf.numPages; p++) {
+      setStatus(`Đang quét QR trang ${p}/${pdf.numPages}...`);
+      const codes = await scanPageQR(await pdf.getPage(p));
+      codes.forEach((t, i) => {
+        total++;
+        const q = parseQR(t);
+        if (q) {
+          addResult(`QR - trang ${p}, mã ${i + 1}`, `Số: ${q.id}\nHọ tên: ${q.name}\nNgày cấp: ${q.date}`);
+          console.log(`${tag} QR trang ${p}:`, q, "| gốc:", t);
+        } else {
+          addResult(`QR - trang ${p}, mã ${i + 1} (không đúng định dạng CCCD, hiện nội dung gốc)`, t, "bad");
+          console.warn(`${tag} QR trang ${p} không đủ 7 trường:`, t);
+        }
+      });
+    }
+    const sec = ((performance.now() - t0) / 1000).toFixed(1);
+    if (total) setStatus(`Xong. Tìm thấy ${total} mã QR (${sec}s).`);
+    else { addResult("Kết quả", "Không tìm thấy mã QR nào trong file.", "bad"); setStatus(`Không tìm thấy mã QR (${sec}s).`); }
+    pdf.destroy();
+  } catch (e) {
+    console.error(`${tag} LỖI:`, e);
+    setStatus("Lỗi: " + (e.message || e));
+  }
+  $("start").disabled = false; $("pick").disabled = false;
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+//-------------Placeholder chung-------------//
+Số hợp đồng -> ${soHopDong}
+Ngay -> ${ngayKy}
+Thang -> ${thangKy}
+Nam -> ${namKy}
+NgayThangNam -> ${ngayThangNamKy}
+Tên chủ thể -> ${tenDoanhNghiepA}
+Địa chỉ -> ${diaChiA}
+Mã số thuế -> ${maSoThueA}
+Danh xưng người đại diện + Người đại diện -> ${nguoiDaiDienA}
+Chức vụ người đại diện -> ${chucVuDaiDienA}
+Số CCCD -> ${soCccdDaiDienA}
+Nơi cấp -> ${noiCapCccdA}
+Ngày cấp -> ${ngayCapCccdA}
+Người lập hợp đồng -> ${nguoiLienHeB}
+Người liên hệ -> ${nguoiLienHeA}
+Chức vụ người liên hệ -> ${chucVuNguoiLienHeA}
+Số điện thoại -> ${sdtLienHeA}
+Email -> ${emailLienHeA}
+Người nghiệm thu -> ${nguoiNghiemThuA}
+Người ký xác nhận -> ${nguoiKyXacNhan}
+Kiểu lắp đặt Cấp mới: U+2612 -> ${capMoi}; U+2610 -> ${giaHan}
+Kiểu lắp đặt Gia hạn: U+2610 -> ${capMoi}; U+2612 -> ${giaHan}
+Gói chứa "SmartCA": U+2610 -> ${TokenHSM}; U+2612 -> ${SmartCA}
+Gói không chứa "SmartCA": U+2612 -> ${TokenHSM}; U+2610 -> ${SmartCA}
+Gói chứa "1 năm" hoặc "12 tháng": U+2612 -> ${1nam}; U+2610 -> ${2nam}; U+2610 -> ${3nam}
+Gói chứa "2 năm": U+2610 -> ${1nam}; U+2612 -> ${2nam}; U+2610 -> ${3nam}
+Gói chứa "3 năm": U+2610 -> ${1nam}; U+2610 -> ${2nam}; U+2612 -> ${3nam}
+Gói chứa "cơ bản": U+2610 -> ${coBan}; U+2612 -> ${nangCao}
+Gói chứa "nâng cao": U+2612 -> ${coBan}; U+2610 -> ${nangCao}
+Gói không chứa "cơ bản" hoặc "nâng cao": U+2612 -> ${coBan}; U+2612 -> ${nangCao}
+Phần đuôi tên Gói cước dạng "[số] tháng" hoặc "[số] năm" -> ${thoiHan}
+Đọc số trong ${thoiHan} bằng chữ, kèm "tháng" hoặc "năm" -> ${soThangBangChu}
+Số lượng thuê bao -> ${soTB}
+Sheet cột A (tên Gói cước) -> ${goiCuoc}
+Sheet cột B -> ${donGiaSauThue}
+Sheet cột C -> ${donGiaTruocThue}
+Cước dịch vụ bổ sung trước thuế -> ${cuocDVBoSung}
+Trong vùng lặp `{#token}...{/token}` (chỉ tạo dòng khi số lượng Token > 0; `${stt}` được tự thêm sau `{#token}`):
+STT dòng Token -> ${stt} (giá trị `2`)
+Số lượng Token -> ${soTB}
+Đơn giá Token trước thuế -> ${cuocDVBoSung}
+Thành tiền Token trước thuế -> ${tongCuocDVBoSung}
+Tiền thuế GTGT của Token -> ${thueDVBoSung}
+Thành tiền Token sau thuế -> ${cuocDVBoSungSauThue}
+value(${soTB}) * value(${donGiaTruocThue}) -> ${thanhTienTruocThue}
+value(${thanhTienTruocThue} + ${cuocDVBoSung}) định dạng #,##0 -> ${tongTienTruocThue}
+CA đơn vị/CA cá nhân: value(${thanhTienTruocThue}) * 0.08 định dạng #,##0 -> ${thueVAT}
+Web Hosting: value(${tongTienTruocThue}) * 0.08 định dạng #,##0 -> ${thueVAT}
+value(${thanhTienTruocThue} + ${thueVAT}) định dạng #,##0 -> ${thanhTienSauThue}
+CA đơn vị/CA cá nhân: value(${thanhTienSauThue} + (nếu có Token) ${cuocDVBoSungSauThue}) -> ${tongGiaTriHopDong}
+Web Hosting: value(${tongTienTruocThue} + ${thueVAT}) định dạng #,##0 -> ${tongGiaTriHopDong}
+DOC_SO_TIEN(value(${tongGiaTriHopDong})) -> ${soTienBangChu}
