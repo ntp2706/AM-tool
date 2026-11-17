@@ -25,6 +25,10 @@ const CONTRACT_TEMPLATE_IDS = {
     '1CFnb-4dcacA2Lqg_L5BG5uuQe8G8N7x2',
     '16e8lTtH52fGaF_xrkC5PDX_GWLI4kpnC',
   ],
+  'hoadon-dien-tu': [
+    '1NsQRv9EN_HIfQpmh6hsKgUoRdTKGHX9T',
+    '1gRulvNA30WnEEkkHCFKLiT5kr0_6k5zz',
+  ],
 };
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const TEMPLATE_FIELDS = [
@@ -36,7 +40,8 @@ const TEMPLATE_FIELDS = [
   'thoiHan', 'soThangBangChu',
   'capMoi', 'giaHan', 'TokenHSM', 'SmartCA', '1nam', '2nam', '3nam', 'coBan', 'nangCao',
   'donGiaSauThue', 'donGiaTruocThue', 'cuocDVBoSung', 'soTB', 'thanhTienTruocThue',
-  'tongTienTruocThue', 'thueVAT', 'thanhTienSauThue', 'tongGiaTriHopDong', 'soTienBangChu',
+  'soLuongHD', 'soHDBBNT', 'tongTienTruocThue', 'thueVAT', 'thanhTienSauThue',
+  'tongGiaTriHopDong', 'soTienBangChu',
 ];
 const TOKEN_TEMPLATE_FIELDS = [
   'stt', 'soTB', 'cuocDVBoSung', 'tongCuocDVBoSung', 'thueDVBoSung', 'cuocDVBoSungSauThue',

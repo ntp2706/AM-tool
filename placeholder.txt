@@ -51,3 +51,8 @@ value(${thanhTienTruocThue} + ${thueVAT}) định dạng #,##0 -> ${thanhTienSau
 CA đơn vị/CA cá nhân: value(${thanhTienSauThue} + (nếu có Token) ${cuocDVBoSungSauThue}) -> ${tongGiaTriHopDong}
 Web Hosting: value(${tongTienTruocThue} + ${thueVAT}) định dạng #,##0 -> ${tongGiaTriHopDong}
 DOC_SO_TIEN(value(${tongGiaTriHopDong})) -> ${soTienBangChu}
+
+//-------------Loại hình Hóa đơn điện tử (HDDT)-------------//
+Số lượng hóa đơn (mặc định 1; gói MAX lấy theo thẻ Số lượng hóa đơn) -> ${soLuongHD}
+Số hóa đơn BBNT (gói MAX dùng ${soLuongHD}; gói khác bóc số từ tên gói cước) -> ${soHDBBNT}
+Phí thiết kế mẫu: Có -> 500000 định dạng #,##0; Không -> "Miễn phí" -> ${cuocDVBoSung}

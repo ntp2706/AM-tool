@@ -930,7 +930,7 @@ document.getElementById('exportBtn').addEventListener('click',async event=>{
  if(!checkRequiredFields())return;
  const button=event.currentTarget;
  const business=businessKey(businessCombo.value);
- if(!['webhosting','cadonvi','cacanhan','ca&bhxh','combohkd','hkdcu','pharmacy'].includes(business)){
+ if(!['webhosting','cadonvi','cacanhan','ca&bhxh','combohkd','hkdcu','pharmacy','hoadondientu'].includes(business)){
   alert('Hiện tại chức năng xuất file chưa hỗ trợ loại hình này.');
   return;
  }
@@ -1168,12 +1168,15 @@ async function exportContract({splitForSignature=false}={}){
  const business=businessKey(businessCombo.value);
  const isWebHosting=business==='webhosting';
  const isCA=['cadonvi','cacanhan','ca&bhxh'].includes(business);
+ const isHddt=business==='hoadondientu';
+ const isMaxInvoicePackage=/MAX/i.test(packageCombo.value);
  const packageName=packageCombo.value;
  if(!packageName||!packageSourceSheet)throw new Error('Vui lòng chọn gói cước trước khi xuất hợp đồng.');
  const packagePrices=await loadPackagePrice(packageSourceSheet,packageName);
  syncContractDate(contractDateInput.value);
  let addonBeforeTax=0;
  let soTB=1;
+ let soLuongHD=1;
  let tokenRows=[];
  let tokenTotalBeforeTax=0;
  let tokenVat=0;
@@ -1201,12 +1204,24 @@ async function exportContract({splitForSignature=false}={}){
     cuocDVBoSungSauThue:formatContractAmount(tokenTotalBeforeTax+tokenVat)
    }];
   }
+ }else if(isHddt){
+  if(isMaxInvoicePackage){
+   soLuongHD=Number(document.getElementById('packageQuantity').value||1);
+   if(!Number.isSafeInteger(soLuongHD)||soLuongHD<1)throw new Error('Số lượng hóa đơn không hợp lệ.');
+  }
+  if(document.getElementById('designFee').value==='Có')addonBeforeTax=500000;
  }
  if(!Number.isSafeInteger(soTB)||soTB<1)throw new Error('Số lượng thuê bao không hợp lệ.');
- const thanhTienTruocThue=packagePrices.donGiaTruocThue*soTB;
+ const thanhTienTruocThue=packagePrices.donGiaTruocThue*(isHddt?soLuongHD:soTB);
  const totalBeforeTax=thanhTienTruocThue+addonBeforeTax;
  const vat=(isCA?thanhTienTruocThue:totalBeforeTax)*.08;
  const grandTotal=totalBeforeTax+vat+(isCA?tokenVat:0);
+ const cuocDVBoSung=isHddt
+  ?document.getElementById('designFee').value==='Có'?formatContractAmount(500000):'Miễn phí'
+  :formatContractAmount(addonBeforeTax);
+ const soHDBBNT=!isHddt?'':isMaxInvoicePackage
+  ?String(soLuongHD)
+  :(packageName.match(/\d+/g)||[]).join('');
  const representativeName=document.getElementById('representative').value.trim();
  const honorific=document.getElementById('representativeHonorific').value.trim();
  const templateData={
@@ -1237,8 +1252,10 @@ async function exportContract({splitForSignature=false}={}){
   goiCuoc:packageName,
   donGiaSauThue:formatContractAmount(packagePrices.donGiaSauThue),
   donGiaTruocThue:formatContractAmount(packagePrices.donGiaTruocThue),
-  cuocDVBoSung:formatContractAmount(addonBeforeTax),
+  cuocDVBoSung,
   soTB:String(soTB),
+  soLuongHD:isHddt?String(soLuongHD):'',
+  soHDBBNT,
   thanhTienTruocThue:formatContractAmount(thanhTienTruocThue),
   tongTienTruocThue:formatContractAmount(totalBeforeTax),
   thueVAT:formatContractAmount(vat),
@@ -1260,8 +1277,8 @@ async function exportContract({splitForSignature=false}={}){
   .trim()
   .replace(/[. ]+$/,'');
  const filenameBase=`${safeOwner} ${safeBusiness} ${Ngay}.${Thang}.${Nam}`;
- const templateType=isWebHosting?'web-hosting':business==='cacanhan'?'ca-ca-nhan':business==='ca&bhxh'?'ca-bhxh':business==='combohkd'?'combo-hkd':business==='hkdcu'?'hkd-cu':business==='pharmacy'?'pharmacy':'ca-don-vi';
- const templateCount=['ca-ca-nhan','pharmacy'].includes(templateType)?2:1;
+ const templateType=isWebHosting?'web-hosting':isHddt?'hoadon-dien-tu':business==='cacanhan'?'ca-ca-nhan':business==='ca&bhxh'?'ca-bhxh':business==='combohkd'?'combo-hkd':business==='hkdcu'?'hkd-cu':business==='pharmacy'?'pharmacy':'ca-don-vi';
+ const templateCount=['ca-ca-nhan','pharmacy','hoadon-dien-tu'].includes(templateType)?2:1;
  const files=await Promise.all(Array.from({length:templateCount},async(_,templateIndex)=>{
   const prefix=templateIndex===0?'HĐ':templateType==='ca-ca-nhan'?'BM':'BBNT';
   const filename=`${prefix} ${filenameBase}.docx`;
@@ -1399,7 +1416,8 @@ async function updateContractTotal(){
    if(['cadonvi','cacanhan'].includes(type)){
     multiplier=Number(document.getElementById('subscriberQuantity').value);
    }else if(['hoadondientu','bienlaidientu'].includes(type)&&!document.getElementById('packageQuantityField').hidden){
-    multiplier=Number(document.getElementById('packageQuantity').value);
+    const defaultQuantity=type==='hoadondientu'&&/MAX/i.test(packageCombo.value)?1:0;
+    multiplier=Number(document.getElementById('packageQuantity').value||defaultQuantity);
    }
    if(!Number.isFinite(multiplier)||multiplier<1){
     contractTotal.textContent='Nhập số lượng hợp lệ';
