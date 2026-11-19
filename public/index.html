@@ -60,10 +60,11 @@ h1{font-size:22px;line-height:1.2;margin:2px 0 2px;letter-spacing:-.4px}
 .validation-dialog .btn{align-self:flex-end}
 .export-choice-modal[hidden]{display:none}
 .export-choice-modal:not([hidden]){position:fixed;inset:0;z-index:240;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(22,39,28,.52)}
-.export-choice-dialog{width:min(440px,100%);display:flex;flex-direction:column;gap:12px;padding:20px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(18,44,26,.28)}
+.export-choice-dialog{width:min(600px,100%);display:flex;flex-direction:column;gap:12px;padding:20px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(18,44,26,.28)}
 .export-choice-dialog h2{margin:0;font-size:17px}
 .export-choice-dialog p{margin:0;color:var(--muted);font-size:12px}
 .export-choice-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:4px}
+.export-choice-actions [hidden]{display:none}
 .subscriber-import-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:8px}
 .subscriber-import-button{width:100%;height:36px;padding:0 8px}
 .ca-import-modal[hidden]{display:none}
@@ -330,6 +331,7 @@ select option:hover,select option:checked{background:var(--green)!important;colo
       <button id="exportChoiceCancel" class="btn btn-outline" type="button">Huỷ</button>
       <button id="exportSplitBtn" class="btn btn-outline" type="button">Tách file ký điện tử</button>
       <button id="exportNowBtn" class="btn btn-primary" type="button">Xuất ngay</button>
+      <button id="exportEcontractBtn" class="btn btn-outline" type="button" hidden>Xuất excel econtract</button>
     </div>
   </section>
 </div>
@@ -712,7 +714,15 @@ document.getElementById('validationClose').addEventListener('click',closeValidat
 validationModal.addEventListener('click',event=>{if(event.target===validationModal)closeValidationModal()});
 const exportChoiceModal=document.getElementById('exportChoiceModal');
 let resolveExportChoice=null;
-function chooseExportMode(){
+function chooseExportMode(business){
+ const isHddt=business==='hoadondientu';
+ document.getElementById('exportChoiceTitle').textContent=isHddt?'Chọn định dạng xuất file':'Chọn cách xuất file';
+ exportChoiceModal.querySelector('p').textContent=isHddt
+  ?'Chọn xuất hợp đồng DOCX hoặc file Excel eContract.'
+  :'Xuất ngay để tải DOCX như hiện tại, hoặc tách PDF phục vụ ký điện tử.';
+ document.getElementById('exportNowBtn').textContent=isHddt?'Xuất file DOCX':'Xuất ngay';
+ document.getElementById('exportSplitBtn').hidden=isHddt;
+ document.getElementById('exportEcontractBtn').hidden=!isHddt;
  exportChoiceModal.hidden=false;
  document.getElementById('exportNowBtn').focus();
  return new Promise(resolve=>{resolveExportChoice=resolve});
@@ -724,6 +734,7 @@ function closeExportChoice(mode){
 }
 document.getElementById('exportNowBtn').addEventListener('click',()=>closeExportChoice('now'));
 document.getElementById('exportSplitBtn').addEventListener('click',()=>closeExportChoice('split'));
+document.getElementById('exportEcontractBtn').addEventListener('click',()=>closeExportChoice('excel'));
 document.getElementById('exportChoiceCancel').addEventListener('click',()=>closeExportChoice(null));
 exportChoiceModal.addEventListener('click',event=>{if(event.target===exportChoiceModal)closeExportChoice(null)});
 document.addEventListener('keydown',event=>{
@@ -934,12 +945,12 @@ document.getElementById('exportBtn').addEventListener('click',async event=>{
   alert('Hiện tại chức năng xuất file chưa hỗ trợ loại hình này.');
   return;
  }
- const mode=['cadonvi','cacanhan','ca&bhxh'].includes(business)?await chooseExportMode():'now';
+ const mode=['cadonvi','cacanhan','ca&bhxh','hoadondientu'].includes(business)?await chooseExportMode(business):'now';
  if(!mode)return;
  button.disabled=true;
- button.textContent=mode==='split'?'Đang tách file…':'Đang xuất…';
+ button.textContent=mode==='split'?'Đang tách file…':mode==='excel'?'Đang xuất Excel…':'Đang xuất…';
  try{
-  await exportContract({splitForSignature:mode==='split'});
+  await exportContract({splitForSignature:mode==='split',outputFormat:mode==='excel'?'excel':'docx'});
  }catch(error){
   console.error('[EXPORT] Không thể xuất hợp đồng:',error);
   alert('Không thể xuất file: '+(error.message||error));
@@ -1164,7 +1175,7 @@ function downloadExportFile(blob,filename){
  link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();
  setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
-async function exportContract({splitForSignature=false}={}){
+async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
  const business=businessKey(businessCombo.value);
  const isWebHosting=business==='webhosting';
  const isCA=['cadonvi','cacanhan','ca&bhxh'].includes(business);
@@ -1277,6 +1288,21 @@ async function exportContract({splitForSignature=false}={}){
   .trim()
   .replace(/[. ]+$/,'');
  const filenameBase=`${safeOwner} ${safeBusiness} ${Ngay}.${Thang}.${Nam}`;
+ if(outputFormat==='excel'){
+  if(!isHddt)throw new Error('Xuất Excel eContract chỉ áp dụng cho loại hình HDDT.');
+  const filename=`${filenameBase}.xlsx`;
+  const response=await fetch('/api/export-econtract',{
+   method:'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({...templateData,filename})
+  });
+  if(!response.ok){
+   const error=await response.json().catch(()=>({}));
+   throw new Error(error.error||`Máy chủ trả về lỗi HTTP ${response.status}.`);
+  }
+  downloadExportFile(await response.blob(),filename);
+  return;
+ }
  const templateType=isWebHosting?'web-hosting':isHddt?'hoadon-dien-tu':business==='cacanhan'?'ca-ca-nhan':business==='ca&bhxh'?'ca-bhxh':business==='combohkd'?'combo-hkd':business==='hkdcu'?'hkd-cu':business==='pharmacy'?'pharmacy':'ca-don-vi';
  const templateCount=['ca-ca-nhan','pharmacy','hoadon-dien-tu'].includes(templateType)?2:1;
  const files=await Promise.all(Array.from({length:templateCount},async(_,templateIndex)=>{

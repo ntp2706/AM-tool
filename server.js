@@ -30,7 +30,9 @@ const CONTRACT_TEMPLATE_IDS = {
     '1gRulvNA30WnEEkkHCFKLiT5kr0_6k5zz',
   ],
 };
+const ECONTRACT_TEMPLATE_ID = '11lrYiWrsFHPQAAQ8vJxByG75oN6OYUe7';
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const TEMPLATE_FIELDS = [
   'soHopDong', 'ngayKy', 'thangKy', 'namKy', 'ngayThangNamKy',
   'tenDoanhNghiepA', 'diaChiA', 'maSoThueA', 'nguoiDaiDienA',
@@ -136,6 +138,13 @@ function parseResults($, box) {
 const send = (res, code, body, type = 'application/json; charset=utf-8') => {
   res.writeHead(code, { 'Content-Type': type }); res.end(body);
 };
+function attachmentDisposition(filename) {
+  const asciiFilename = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  const encodedFilename = encodeURIComponent(filename).replace(/['()*]/g, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
+  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodedFilename}`;
+}
 const readBody = (req) => new Promise((r) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => r(b)); });
 async function readBuffer(req, maxSize) {
   const chunks = [];
@@ -250,6 +259,77 @@ function parseCaWorkbook(buffer) {
   });
   if (!rows.length) throw new Error('Không tìm thấy dữ liệu CA từ hàng 2 trở đi.');
   return rows;
+}
+
+function findWorkbookSheetPath(zip, sheetName) {
+  const readXml = (name) => {
+    const file = zip.file(name);
+    if (!file) throw new Error(`File Excel thiếu thành phần ${name}.`);
+    return cheerio.load(file.asText(), { xmlMode: true });
+  };
+  const workbook = readXml('xl/workbook.xml');
+  const relationships = readXml('xl/_rels/workbook.xml.rels');
+  const sheet = workbook('sheet').toArray().find((element) => workbook(element).attr('name') === sheetName);
+  if (!sheet) throw new Error(`Không tìm thấy sheet "${sheetName}" trong mẫu eContract.`);
+  const relationshipId = workbook(sheet).attr('r:id');
+  const target = relationships('Relationship')
+    .filter((_, element) => relationships(element).attr('Id') === relationshipId)
+    .first()
+    .attr('Target');
+  if (!target) throw new Error(`Không tìm thấy nội dung sheet "${sheetName}".`);
+  const sheetPath = target.startsWith('/')
+    ? target.slice(1)
+    : path.posix.normalize(path.posix.join('xl', target));
+  if (!sheetPath.startsWith('xl/worksheets/')) throw new Error(`Đường dẫn sheet "${sheetName}" không hợp lệ.`);
+  return sheetPath;
+}
+
+function replaceEcontractPlaceholders(zip, sheetName, cellReferences, values) {
+  const sharedStringsFile = zip.file('xl/sharedStrings.xml');
+  const sharedStrings = sharedStringsFile
+    ? cheerio.load(sharedStringsFile.asText(), { xmlMode: true })('si').toArray()
+      .map((element) => cheerio.load(element, { xmlMode: true })('si').text())
+    : [];
+  const sheetPath = findWorkbookSheetPath(zip, sheetName);
+  const worksheetFile = zip.file(sheetPath);
+  if (!worksheetFile) throw new Error(`File Excel thiếu nội dung sheet "${sheetName}".`);
+  const worksheet = cheerio.load(worksheetFile.asText(), { xmlMode: true });
+  const readCellText = (cell) => {
+    const type = cell.attr('t');
+    let text = type === 'inlineStr'
+      ? cell.find('is').text()
+      : cell.children('v').first().text();
+    if (type === 's') text = sharedStrings[Number(text)] ?? '';
+    return text;
+  };
+  for (const reference of cellReferences) {
+    const cell = worksheet(`c[r="${reference}"]`).first();
+    if (!cell.length) continue;
+    const text = readCellText(cell);
+    const rowMatch = /^C(\d+)$/.exec(reference);
+    const rowVariable = rowMatch && /^\$\{([^}]+)\}$/.exec(readCellText(worksheet(`c[r="B${rowMatch[1]}"]`).first()));
+    const hasRowValue = rowVariable && Object.prototype.hasOwnProperty.call(values, rowVariable[1]);
+    if (!text.includes('${') && !hasRowValue && text.trim()) continue;
+    let replacement = text.includes('${')
+      ? text.replace(/\$\{([^}]+)\}/g, (_, key) => String(values[key] ?? ''))
+      : hasRowValue ? String(values[rowVariable[1]] ?? '') : text;
+    if (!replacement.trim()) replacement = ' ';
+    cell.empty().attr('t', 'inlineStr')
+      .append(`<is><t xml:space="preserve">${replacement.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</t></is>`);
+  }
+  zip.file(sheetPath, worksheet.xml());
+}
+
+function createEcontractWorkbook(buffer, values) {
+  const zip = new PizZip(buffer);
+  replaceEcontractPlaceholders(
+    zip,
+    'Thông tin hợp đồng',
+    Array.from({ length: 54 }, (_, index) => `C${index + 2}`),
+    values,
+  );
+  replaceEcontractPlaceholders(zip, 'Bảng #dv', ['B2', 'C2', 'D2', 'E2', 'F2', 'G2'], values);
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 function useTimesNewRoman(xml) {
@@ -387,6 +467,41 @@ http.createServer(async (req, res) => {
       return send(res, 200, JSON.stringify({ rows }));
     }
 
+    if (u.pathname === '/api/export-econtract' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      const templateUrl = `https://docs.google.com/spreadsheets/d/${ECONTRACT_TEMPLATE_ID}/export?format=xlsx`;
+      const templateResponse = await fetch(templateUrl, { redirect: 'follow' });
+      if (!templateResponse.ok) throw new Error(`Không tải được mẫu Excel eContract từ Google Drive (HTTP ${templateResponse.status}).`);
+      const contentLength = Number(templateResponse.headers.get('content-length') || 0);
+      if (contentLength > MAX_TEMPLATE_SIZE) throw new Error('Tệp mẫu Excel eContract vượt quá giới hạn 10 MB.');
+      const template = Buffer.from(await templateResponse.arrayBuffer());
+      if (template.length > MAX_TEMPLATE_SIZE) throw new Error('Tệp mẫu Excel eContract vượt quá giới hạn 10 MB.');
+      if (template[0] !== 0x50 || template[1] !== 0x4b) {
+        throw new Error('Tệp Google Drive không phải mẫu Excel eContract hợp lệ hoặc không có quyền tải xuống.');
+      }
+
+      const output = createEcontractWorkbook(template, {
+        ...payload,
+        dienThoaiA: payload.sdtLienHeA,
+        faxA: '',
+        soTaiKhoanA: '',
+        diaChiTaiKhoanA: '',
+        soGiayUyQuyenA: '',
+        ngayGiayUyQuyenA: '',
+        donViUyQuyenA: '',
+      });
+      const filename = String(payload.filename || 'eContract.xlsx')
+        .replace(/[<>:"\\|?*\x00-\x1f]/g, '_')
+        .replace(/\//g, '_');
+      res.writeHead(200, {
+        'Content-Type': XLSX_MIME_TYPE,
+        'Content-Disposition': attachmentDisposition(filename),
+        'Content-Length': output.length,
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.end(output);
+    }
+
     if (u.pathname === '/api/export-web-hosting' && req.method === 'POST') {
       const payload = JSON.parse(await readBody(req));
       const { templateIndex, templateType = 'web-hosting' } = payload;
@@ -460,7 +575,7 @@ http.createServer(async (req, res) => {
         .replace(/\//g, '_');
       res.writeHead(200, {
         'Content-Type': DOCX_MIME_TYPE,
-        'Content-Disposition': `attachment; filename="${templateType}-${templateIndex + 1}.docx"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        'Content-Disposition': attachmentDisposition(filename),
         'Content-Length': output.length,
         'X-Content-Type-Options': 'nosniff',
       });
