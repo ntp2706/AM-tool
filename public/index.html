@@ -961,7 +961,11 @@ document.getElementById('exportBtn').addEventListener('click',async event=>{
 });
 const SHEET_ID='1qOIxxCKTiQAWM21ZtAqBa34MEZKvAEwQxjItlBKxoOI';
 const norm=s=>s.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
-const businessKey=s=>norm(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/\s+/g,'');
+const businessKey=s=>{
+ const key=norm(s).replace(/[\u200B-\u200D\uFEFF]/g,'').normalize('NFD')
+  .replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/[^a-z0-9&]/g,'');
+ return key.includes('hoadondientu')||key==='hddt'?'hoadondientu':key;
+};
 // Loại hình -> tên sheet chứa danh sách gói cước (cột A)
 const PACKAGE_SHEETS=Object.fromEntries(Object.entries({
  'CA cá nhân':'CACaNhan','BHXH':'BHXH','Combo HKD':'ComboHKD','PetroMTT':'PetroMTT','Pharmacy':'Pharmacy',

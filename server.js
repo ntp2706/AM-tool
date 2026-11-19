@@ -135,8 +135,8 @@ function parseResults($, box) {
   return out;
 }
 
-const send = (res, code, body, type = 'application/json; charset=utf-8') => {
-  res.writeHead(code, { 'Content-Type': type }); res.end(body);
+const send = (res, code, body, type = 'application/json; charset=utf-8', headers = {}) => {
+  res.writeHead(code, { 'Content-Type': type, ...headers }); res.end(body);
 };
 function attachmentDisposition(filename) {
   const asciiFilename = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
@@ -448,7 +448,7 @@ function setBlackTableBordersToHalfPoint(xml) {
 http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
   try {
-    if (u.pathname === '/') return send(res, 200, fs.readFileSync(path.join(__dir, 'public/index.html')), 'text/html; charset=utf-8');
+    if (u.pathname === '/') return send(res, 200, fs.readFileSync(path.join(__dir, 'public/index.html')), 'text/html; charset=utf-8', { 'Cache-Control': 'no-store' });
     if (u.pathname === '/extract.html') return send(res, 200, fs.readFileSync(path.join(__dir, 'public/extract.html')), 'text/html; charset=utf-8');
     if (u.pathname === '/sotien.gs') return send(res, 200, fs.readFileSync(path.join(__dir, 'public/sotien.gs')), 'text/javascript; charset=utf-8');
     if (u.pathname === '/img/stamp.png') return send(res, 200, fs.readFileSync(path.join(__dir, 'img/stamp.png')), 'image/png');
