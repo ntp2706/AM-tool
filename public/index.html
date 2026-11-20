@@ -266,8 +266,13 @@ select option:hover,select option:checked{background:var(--green)!important;colo
       <!-- Column 4: Dịch vụ & thao tác -->
       <div class="column">
         <div class="field"><label for="businessInput">Loại hình</label><div class="combo" id="businessCombo"><input id="businessInput" autocomplete="off" role="combobox" aria-expanded="false"><span class="caret" aria-hidden="true"></span><div class="combo-pop" role="listbox"></div></div></div>
-        <div class="field"><label for="installType">Kiểu lắp đặt</label><select id="installType"><option value="" selected disabled>Chọn kiểu lắp đặt</option><option>Cấp mới</option><option>Gia hạn</option></select></div>
+        <div class="field" id="installTypeField"><label for="installType">Kiểu lắp đặt</label><select id="installType"><option value="" selected disabled>Chọn kiểu lắp đặt</option><option>Cấp mới</option><option>Gia hạn</option></select></div>
         <div class="field"><label for="packageInput">Gói cước</label><div class="combo" id="packageCombo"><input id="packageInput" autocomplete="off" role="combobox" aria-expanded="false"><span class="caret" aria-hidden="true"></span><div class="combo-pop" role="listbox"></div></div></div>
+        <div class="field conditional-field" id="businessEntityField" hidden>
+          <label for="businessEntityType">Loại hình doanh nghiệp</label>
+          <select id="businessEntityType"><option value="" selected disabled>Chọn loại hình doanh nghiệp</option><option value="Công ty TNHH">Công ty TNHH</option><option value="Doanh nghiệp tư nhân">Doanh nghiệp tư nhân</option><option value="custom">Tự nhập</option></select>
+          <input id="businessEntityOther" class="conditional-field" placeholder="Nhập loại hình doanh nghiệp" hidden>
+        </div>
         <div class="field conditional-field" id="websiteDomainField" hidden><label for="websiteDomain">Tên miền website</label><input id="websiteDomain" placeholder="Nhập tên miền website"></div>
         <div class="field conditional-field" id="websiteDesignField" hidden><label for="websiteDesign">Thiết kế website</label><select id="websiteDesign"><option value="0" selected>Không</option><option value="6480000">6.480.000đ</option><option value="3888000">3.888.000đ</option></select></div>
         <div class="conditional-row" id="tokenOptions" hidden>
@@ -893,7 +898,7 @@ function updateFieldStates(){
 }
 function checkRequiredFields(){
  const business=businessKey(businessCombo.value);
- const fields=requiredFields.base
+ const fields=requiredFields.base.filter(([id])=>business!=='nq66'||!['installType','contract'].includes(id))
   .concat(requiredBusinessTypes.has(business)?requiredFields.identity:[])
   .concat(business==='webhosting'?requiredFields.webHosting:[]);
  const missing=[];
@@ -922,7 +927,11 @@ function checkRequiredFields(){
 }
 function syncRequiredIndicators(){
  const business=businessKey(businessCombo.value);
- const requiredIds=new Set(['embed','owner','address','contract','installType']);
+ const requiredIds=new Set(['embed','owner','address']);
+ if(business!=='nq66'){
+  requiredIds.add('contract');
+  requiredIds.add('installType');
+ }
  if(requiredBusinessTypes.has(business))requiredFields.identity.forEach(([id])=>requiredIds.add(id));
  if(business==='webhosting')requiredFields.webHosting.forEach(([id])=>requiredIds.add(id));
  document.querySelectorAll('.form-grid label .required.dynamic').forEach(marker=>marker.remove());
@@ -943,7 +952,7 @@ document.querySelector('.form-grid').addEventListener('change',event=>{
 document.getElementById('exportBtn').addEventListener('click',async event=>{
  const rawBusiness=businessCombo.value;
  const business=businessKey(rawBusiness);
- const supportedBusinessTypes=['webhosting','cadonvi','cacanhan','ca&bhxh','combohkd','hkdcu','pharmacy','hoadondientu'];
+ const supportedBusinessTypes=['webhosting','cadonvi','cacanhan','ca&bhxh','combohkd','hkdcu','pharmacy','hoadondientu','nq66'];
  console.info('[EXPORT] Kiểm tra loại hình trước khi xuất',{
   selected:rawBusiness,
   normalized:business,
@@ -997,7 +1006,7 @@ const CONDITIONAL_PACKAGE_SHEETS={
  hoadondientu:{control:'invoiceType',prompt:'Chọn loại hóa đơn trước',sheets:{'Hóa đơn thường':'HDDTThuong','MTT thường':'MTTThuong','MTT cho hộ kinh doanh':'MTTHKD','Xăng dầu thường':'PetroThuong','Xăng dầu MTT':'PetroMTT'}}
 };
 // Dự phòng khi không tải được sheet LoaiHinh
-const BUSINESS_FALLBACK=['CA đơn vị','CA cá nhân','CA & BHXH','Hoá đơn điện tử','BHXH','Combo HKD','HKD cũ','vnEdu HSS','vnEdu DigiLib','Web Hosting','Thiết kế website','Tên miền','Pharmacy'];
+const BUSINESS_FALLBACK=['CA đơn vị','CA cá nhân','CA & BHXH','Hoá đơn điện tử','BHXH','Combo HKD','HKD cũ','vnEdu HSS','vnEdu DigiLib','Web Hosting','Thiết kế website','Tên miền','Pharmacy','NQ66'];
 const cache={};
 // Dùng JSONP (thẻ <script>) vì fetch bị chặn CORS khi mở file trực tiếp hoặc từ domain khác
 let jsonpSeq=0;
@@ -1061,6 +1070,10 @@ function getInstallTypePlaceholders(installType){
  if(installType==='Cấp mới')return{capMoi:checked,giaHan:unchecked};
  if(installType==='Gia hạn')return{capMoi:unchecked,giaHan:checked};
  throw new Error('Kiểu lắp đặt không hợp lệ.');
+}
+function getWardFromAddress(address){
+ const match=String(address||'').match(/(?:^|[,;]\s*|\s+)(?:xã|phường)\s+([^,;]+)/i);
+ return match?match[1].trim():'';
 }
 function getPackageSelectionPlaceholders(packageName){
  const checked='\u2612',unchecked='\u2610';
@@ -1203,10 +1216,11 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
  const isWebHosting=business==='webhosting';
  const isCA=['cadonvi','cacanhan','ca&bhxh'].includes(business);
  const isHddt=business==='hoadondientu';
+ const isNq66=business==='nq66';
  const isMaxInvoicePackage=/MAX/i.test(packageCombo.value);
  const packageName=packageCombo.value;
- if(!packageName||!packageSourceSheet)throw new Error('Vui lòng chọn gói cước trước khi xuất hợp đồng.');
- const packagePrices=await loadPackagePrice(packageSourceSheet,packageName);
+ if(!isNq66&&(!packageName||!packageSourceSheet))throw new Error('Vui lòng chọn gói cước trước khi xuất hợp đồng.');
+ const packagePrices=isNq66?{donGiaSauThue:0,donGiaTruocThue:0}:await loadPackagePrice(packageSourceSheet,packageName);
  syncContractDate(contractDateInput.value);
  let addonBeforeTax=0;
  let soTB=1;
@@ -1273,6 +1287,12 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
   soCccdDaiDienA:document.getElementById('idnumber').value.trim(),
   noiCapCccdA:document.getElementById('issueplace').value,
   ngayCapCccdA:document.getElementById('issuedate').value.trim(),
+  loaiHinhDN:isNq66
+   ?document.getElementById('businessEntityType').value==='custom'
+    ?document.getElementById('businessEntityOther').value.trim()
+    :document.getElementById('businessEntityType').value
+   :'',
+  xaPhuong:isNq66?getWardFromAddress(addressInput.value):'',
   nguoiLienHeB:document.getElementById('creator').value,
   nguoiLienHeA:document.getElementById('contact').value.trim(),
   chucVuNguoiLienHeA:document.getElementById('contactTitle').value.trim(),
@@ -1280,23 +1300,23 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
   emailLienHeA:document.getElementById('email').value.trim(),
   nguoiNghiemThuA:acceptance.value.trim(),
   nguoiKyXacNhan:document.getElementById('signer').value.trim(),
-  ...getInstallTypePlaceholders(document.getElementById('installType').value),
-  ...getPackageSelectionPlaceholders(packageName),
+  ...(isNq66?{}:getInstallTypePlaceholders(document.getElementById('installType').value)),
+  ...(isNq66?{}:getPackageSelectionPlaceholders(packageName)),
   ...getPackageDurationPlaceholders(packageName),
   tenMien:document.getElementById('websiteDomain').value.trim(),
   goiCuoc:packageName,
-  donGiaSauThue:formatContractAmount(packagePrices.donGiaSauThue),
-  donGiaTruocThue:formatContractAmount(packagePrices.donGiaTruocThue),
-  cuocDVBoSung,
+  donGiaSauThue:isNq66?'':formatContractAmount(packagePrices.donGiaSauThue),
+  donGiaTruocThue:isNq66?'':formatContractAmount(packagePrices.donGiaTruocThue),
+  cuocDVBoSung:isNq66?'':cuocDVBoSung,
   soTB:String(soTB),
   soLuongHD:isHddt?String(soLuongHD):'',
   soHDBBNT,
-  thanhTienTruocThue:formatContractAmount(thanhTienTruocThue),
-  tongTienTruocThue:formatContractAmount(totalBeforeTax),
-  thueVAT:formatContractAmount(vat),
-  thanhTienSauThue:formatContractAmount(thanhTienTruocThue+vat),
-  tongGiaTriHopDong:formatContractAmount(grandTotal),
-  soTienBangChu:DOC_SO_TIEN(grandTotal),
+  thanhTienTruocThue:isNq66?'':formatContractAmount(thanhTienTruocThue),
+  tongTienTruocThue:isNq66?'':formatContractAmount(totalBeforeTax),
+  thueVAT:isNq66?'':formatContractAmount(vat),
+  thanhTienSauThue:isNq66?'':formatContractAmount(thanhTienTruocThue+vat),
+  tongGiaTriHopDong:isNq66?'':formatContractAmount(grandTotal),
+  soTienBangChu:isNq66?'':DOC_SO_TIEN(grandTotal),
   token:tokenRows
  };
  const safeOwner=templateData.tenDoanhNghiepA
@@ -1339,10 +1359,12 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
   downloadExportFile(await response.blob(),filename);
   return;
  }
- const templateType=isWebHosting?'web-hosting':isHddt?'hoadon-dien-tu':business==='cacanhan'?'ca-ca-nhan':business==='ca&bhxh'?'ca-bhxh':business==='combohkd'?'combo-hkd':business==='hkdcu'?'hkd-cu':business==='pharmacy'?'pharmacy':'ca-don-vi';
- const templateCount=['ca-ca-nhan','pharmacy','hoadon-dien-tu'].includes(templateType)?2:1;
+ const templateType=isWebHosting?'web-hosting':isHddt?'hoadon-dien-tu':isNq66?'nq66':business==='cacanhan'?'ca-ca-nhan':business==='ca&bhxh'?'ca-bhxh':business==='combohkd'?'combo-hkd':business==='hkdcu'?'hkd-cu':business==='pharmacy'?'pharmacy':'ca-don-vi';
+ const templateCount=['ca-ca-nhan','pharmacy','hoadon-dien-tu','nq66'].includes(templateType)?2:1;
  const files=await Promise.all(Array.from({length:templateCount},async(_,templateIndex)=>{
-  const prefix=templateIndex===0?'HĐ':templateType==='ca-ca-nhan'?'BM':'BBNT';
+  const prefix=templateType==='nq66'
+   ?templateIndex===0?'Tờ khai':'Hợp đồng'
+   :templateIndex===0?'HĐ':templateType==='ca-ca-nhan'?'BM':'BBNT';
   const filename=`${prefix} ${filenameBase}.docx`;
   const payload={...templateData,templateType,templateIndex,filename,pdfSource:splitForSignature&&templateIndex===0};
   if(templateType==='ca-ca-nhan'&&templateIndex===1)payload.caRows=importedCARows;
@@ -1516,6 +1538,8 @@ function setConditionalField(id,visible){
 }
 function syncServiceOptions(value){
  const type=businessKey(value);
+ setConditionalField('installTypeField',type!=='nq66');
+ setConditionalField('businessEntityField',type==='nq66');
  setConditionalField('tokenOptions',['cadonvi','cacanhan','ca&bhxh'].includes(type));
  setConditionalField('subscriberField',['cadonvi','cacanhan'].includes(type));
  setConditionalField('invoiceTypeField',type==='hoadondientu');
@@ -1558,6 +1582,14 @@ async function refreshPackageList(value){
  }catch(e){if(token!==pkgToken)return;packageCombo.setState('Không tải được sheet '+sheet+' — chọn lại loại hình để thử lại',true);console.warn(sheet+':',e)}
 }
 const businessCombo=createCombo(document.getElementById('businessCombo'),{placeholder:'Chọn hoặc tìm loại hình...',onSelect:onBusinessSelect});
+const businessEntityType=document.getElementById('businessEntityType');
+const businessEntityOther=document.getElementById('businessEntityOther');
+businessEntityType.addEventListener('change',()=>{
+ const custom=businessEntityType.value==='custom';
+ businessEntityOther.hidden=!custom;
+ if(!custom)businessEntityOther.value='';
+ updateFieldStates();
+});
 const packageCombo=createCombo(document.getElementById('packageCombo'),{placeholder:'Chọn hoặc tìm gói cước...',onSelect:packageName=>{
  syncPackageQuantity(packageName);
  updateContractNumber();

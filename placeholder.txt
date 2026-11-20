@@ -56,3 +56,7 @@ DOC_SO_TIEN(value(${tongGiaTriHopDong})) -> ${soTienBangChu}
 Số lượng hóa đơn (mặc định 1; gói MAX lấy theo thẻ Số lượng hóa đơn) -> ${soLuongHD}
 Số hóa đơn BBNT (gói MAX dùng ${soLuongHD}; gói khác bóc số từ tên gói cước) -> ${soHDBBNT}
 Phí thiết kế mẫu: Có -> 500000 định dạng #,##0; Không -> "Miễn phí" -> ${cuocDVBoSung}
+
+//-------------Loại hình NQ66-------------//
+Chọn Công ty TNHH / Doanh nghiệp tư nhân / Tự nhập -> ${loaiHinhDN}
+Phần tên xã hoặc phường bóc từ Địa chỉ, không bao gồm tiền tố "xã"/"phường" -> ${xaPhuong}

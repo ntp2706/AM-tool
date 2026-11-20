@@ -29,6 +29,10 @@ const CONTRACT_TEMPLATE_IDS = {
     '1NsQRv9EN_HIfQpmh6hsKgUoRdTKGHX9T',
     '1gRulvNA30WnEEkkHCFKLiT5kr0_6k5zz',
   ],
+  nq66: [
+    '1yeLcyEAGcdm62oXiapFIEK1Y95f_whsw',
+    '1Rguo9Ikuv5KK8jqJxG4UQYdiXpSRuWQr',
+  ],
 };
 const ECONTRACT_TEMPLATE_IDS = {
   cadonvi: '1Pb06tFY7BZ9Y_cp-HioITHti9SXh_Y2i',
@@ -43,7 +47,7 @@ const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadshee
 const TEMPLATE_FIELDS = [
   'soHopDong', 'ngayKy', 'thangKy', 'namKy', 'ngayThangNamKy',
   'tenDoanhNghiepA', 'diaChiA', 'maSoThueA', 'nguoiDaiDienA',
-  'chucVuDaiDienA', 'soCccdDaiDienA', 'noiCapCccdA', 'ngayCapCccdA',
+  'chucVuDaiDienA', 'soCccdDaiDienA', 'noiCapCccdA', 'ngayCapCccdA', 'loaiHinhDN', 'xaPhuong',
   'nguoiLienHeA', 'nguoiLienHeB', 'chucVuNguoiLienHeA', 'chucVuNguoiLienHeB', 'sdtLienHeA',
   'emailLienHeA', 'nguoiNghiemThuA', 'nguoiKyXacNhan', 'tenMien', 'goiCuoc',
   'thoiHan', 'soThangBangChu',
