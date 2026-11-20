@@ -716,13 +716,16 @@ const exportChoiceModal=document.getElementById('exportChoiceModal');
 let resolveExportChoice=null;
 function chooseExportMode(business){
  const isHddt=business==='hoadondientu';
+ const supportsEcontract=['cadonvi','cacanhan','hoadondientu'].includes(business);
  document.getElementById('exportChoiceTitle').textContent=isHddt?'Chọn định dạng xuất file':'Chọn cách xuất file';
  exportChoiceModal.querySelector('p').textContent=isHddt
   ?'Chọn xuất hợp đồng DOCX hoặc file Excel eContract.'
-  :'Xuất ngay để tải DOCX như hiện tại, hoặc tách PDF phục vụ ký điện tử.';
+  :supportsEcontract
+   ?'Xuất ngay để tải DOCX, tách PDF phục vụ ký điện tử, hoặc xuất Excel eContract.'
+   :'Xuất ngay để tải DOCX như hiện tại, hoặc tách PDF phục vụ ký điện tử.';
  document.getElementById('exportNowBtn').textContent=isHddt?'Xuất file DOCX':'Xuất ngay';
  document.getElementById('exportSplitBtn').hidden=isHddt;
- document.getElementById('exportEcontractBtn').hidden=!isHddt;
+ document.getElementById('exportEcontractBtn').hidden=!supportsEcontract;
  exportChoiceModal.hidden=false;
  document.getElementById('exportNowBtn').focus();
  return new Promise(resolve=>{resolveExportChoice=resolve});
@@ -1207,6 +1210,7 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
  syncContractDate(contractDateInput.value);
  let addonBeforeTax=0;
  let soTB=1;
+ let tokenQuantity=0;
  let soLuongHD=1;
  let tokenRows=[];
  let tokenTotalBeforeTax=0;
@@ -1216,7 +1220,7 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
   addonBeforeTax=CuocDVBoSung/1.08;
  }else if(isCA){
   soTB=Number(document.getElementById('subscriberQuantity').value||1);
-  const tokenQuantity=Number(document.getElementById('tokenQuantity').value||0);
+  tokenQuantity=Number(document.getElementById('tokenQuantity').value||0);
   const tokenPrice=Number(document.getElementById('tokenPrice').value||0);
   if(!Number.isSafeInteger(tokenQuantity)||tokenQuantity<0||!Number.isFinite(tokenPrice)||tokenPrice<0){
    throw new Error('Số lượng hoặc đơn giá Token không hợp lệ.');
@@ -1309,12 +1313,24 @@ async function exportContract({splitForSignature=false,outputFormat='docx'}={}){
   .replace(/[. ]+$/,'');
  const filenameBase=`${safeOwner} ${safeBusiness} ${Ngay}.${Thang}.${Nam}`;
  if(outputFormat==='excel'){
-  if(!isHddt)throw new Error('Xuất Excel eContract chỉ áp dụng cho loại hình HDDT.');
+  if(!['cadonvi','cacanhan','hoadondientu'].includes(business)){
+   throw new Error('Xuất Excel eContract chỉ áp dụng cho CA đơn vị, CA cá nhân và HDDT.');
+  }
+  const tokenEcontractValues=isCA
+   ?tokenRows[0]||{
+    stt:' ',
+    soTB:' ',
+    cuocDVBoSung:' ',
+    tongCuocDVBoSung:' ',
+    thueDVBoSung:' ',
+    cuocDVBoSungSauThue:' '
+   }
+   :{};
   const filename=`${filenameBase}.xlsx`;
   const response=await fetch('/api/export-econtract',{
    method:'POST',
    headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({...templateData,filename})
+   body:JSON.stringify({...templateData,...tokenEcontractValues,businessType:business,filename})
   });
   if(!response.ok){
    const error=await response.json().catch(()=>({}));

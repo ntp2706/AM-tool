@@ -30,7 +30,14 @@ const CONTRACT_TEMPLATE_IDS = {
     '1gRulvNA30WnEEkkHCFKLiT5kr0_6k5zz',
   ],
 };
-const ECONTRACT_TEMPLATE_ID = '11lrYiWrsFHPQAAQ8vJxByG75oN6OYUe7';
+const ECONTRACT_TEMPLATE_IDS = {
+  cadonvi: '1Pb06tFY7BZ9Y_cp-HioITHti9SXh_Y2i',
+  cacanhan: '1lRFtM7xzXimr7BrOGnXWGHEcp6a7Stxw',
+  hoadondientu: '11lrYiWrsFHPQAAQ8vJxByG75oN6OYUe7',
+};
+const ECONTRACT_CHECKBOX_FIELDS = new Set([
+  'capMoi', 'giaHan', 'TokenHSM', 'SmartCA', '1nam', '2nam', '3nam', 'coBan', 'nangCao',
+]);
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const TEMPLATE_FIELDS = [
@@ -306,6 +313,10 @@ function replaceEcontractPlaceholders(zip, sheetName, cellReferences, values) {
     const cell = worksheet(`c[r="${reference}"]`).first();
     if (!cell.length) continue;
     const text = readCellText(cell);
+    const checkboxMatch = /^\$\{([^}]+)\}$/.exec(text);
+    const checkboxValue = checkboxMatch && ECONTRACT_CHECKBOX_FIELDS.has(checkboxMatch[1])
+      ? values[checkboxMatch[1]]
+      : null;
     const rowMatch = /^C(\d+)$/.exec(reference);
     const rowVariable = rowMatch && /^\$\{([^}]+)\}$/.exec(readCellText(worksheet(`c[r="B${rowMatch[1]}"]`).first()));
     const hasRowValue = rowVariable && Object.prototype.hasOwnProperty.call(values, rowVariable[1]);
@@ -314,8 +325,12 @@ function replaceEcontractPlaceholders(zip, sheetName, cellReferences, values) {
       ? text.replace(/\$\{([^}]+)\}/g, (_, key) => String(values[key] ?? ''))
       : hasRowValue ? String(values[rowVariable[1]] ?? '') : text;
     if (!replacement.trim()) replacement = ' ';
-    cell.empty().attr('t', 'inlineStr')
-      .append(`<is><t xml:space="preserve">${replacement.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</t></is>`);
+    if (checkboxValue === '\u2612' || checkboxValue === '\u2610') {
+      cell.empty().removeAttr('t').append(`<v>${checkboxValue === '\u2612' ? '1' : '0'}</v>`);
+    } else {
+      cell.empty().attr('t', 'inlineStr')
+        .append(`<is><t xml:space="preserve">${replacement.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</t></is>`);
+    }
   }
   zip.file(sheetPath, worksheet.xml());
 }
@@ -325,10 +340,12 @@ function createEcontractWorkbook(buffer, values) {
   replaceEcontractPlaceholders(
     zip,
     'Thông tin hợp đồng',
-    Array.from({ length: 54 }, (_, index) => `C${index + 2}`),
+    Array.from({ length: 94 }, (_, index) => `C${index + 2}`),
     values,
   );
-  replaceEcontractPlaceholders(zip, 'Bảng #dv', ['B2', 'C2', 'D2', 'E2', 'F2', 'G2'], values);
+  if (values.businessType === 'hoadondientu') {
+    replaceEcontractPlaceholders(zip, 'Bảng #dv', ['B2', 'C2', 'D2', 'E2', 'F2', 'G2'], values);
+  }
   return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
@@ -469,7 +486,11 @@ http.createServer(async (req, res) => {
 
     if (u.pathname === '/api/export-econtract' && req.method === 'POST') {
       const payload = JSON.parse(await readBody(req));
-      const templateUrl = `https://docs.google.com/spreadsheets/d/${ECONTRACT_TEMPLATE_ID}/export?format=xlsx`;
+      const templateId = ECONTRACT_TEMPLATE_IDS[payload.businessType];
+      if (typeof templateId !== 'string') {
+        return send(res, 400, JSON.stringify({ error: 'Loại hình không hỗ trợ xuất Excel eContract.' }));
+      }
+      const templateUrl = `https://docs.google.com/spreadsheets/d/${templateId}/export?format=xlsx`;
       const templateResponse = await fetch(templateUrl, { redirect: 'follow' });
       if (!templateResponse.ok) throw new Error(`Không tải được mẫu Excel eContract từ Google Drive (HTTP ${templateResponse.status}).`);
       const contentLength = Number(templateResponse.headers.get('content-length') || 0);
